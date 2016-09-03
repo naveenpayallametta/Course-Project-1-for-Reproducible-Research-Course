@@ -1,0 +1,145 @@
+---
+title: "Analysis of Activity Monitoring Data"
+author: "Naveen Payallametta"
+date: "September 2, 2016"
+output: html_document
+---
+
+#**Below is the R Code**#
+
+*Loading the activity dataset into R*
+
+```{r}
+setwd("C:\\Users\\user\\Documents\\R")
+activity_analysis=read.csv("activity.csv",header=TRUE)
+activity_analysis$date=as.Date(activity_analysis$date)
+summary(activity_analysis)
+```
+
+**The above summary shows that there are 2304 NA's in 'steps' variable**
+
+##Calculation of Mean, Median of total number of steps taken per day:##
+
+*Step1:Calculation of total number of steps taken per day:*
+
+```{r}
+library(plyr)
+perDay=ddply(activity_analysis,"date",summarize, sum=sum(steps))
+```
+
+*Step2:Calculation of Mean of the total number of steps taken per day:*
+
+```{r}
+mean_perDay=round(mean(perDay$sum,na.rm=TRUE))
+mean_perDay
+```
+
+*Step3:Calculation of the Median of the total number of steps taken per day:*
+
+```{r}
+median_perDay=median(perDay$sum,na.rm=TRUE)
+median_perDay
+```
+
+###Report: A histogram with density curve of the average number of steps taken per day is shown below.###
+
+```{r}
+library(ggplot2)
+ggplot(perDay, aes(x=sum))+ geom_histogram(aes(y=..density..),binwidth=1000,
+                                           colour="black", fill="lightgreen") + geom_density(alpha=.2, fill="#FF6666")+
+  labs(title="Histogram for Density Vs. Mean Number of Steps per Day")+
+  labs(x="Average number of steps per day",y="Density")
+```
+
+
+##Average Daily Activity Pattern:##
+
+###Time series plot of the 5-minute interval and the average number of steps taken, averaged across all days.###
+
+```{r}
+byIntervel=ddply(activity_analysis,"interval",summarize, avg=mean(steps,na.rm=TRUE))
+ggplot(byIntervel, aes(x = interval, y = avg, group = 1))+ geom_line(colour="red")+
+  labs(title="Time Series of Average Number of Steps per 5-minute Interval")+
+  labs(x="5 minute interval",y="Average number of steps")
+```
+
+```{r}
+which.max(byIntervel[,2])
+maxIntervel=round(byIntervel[104,])
+maxIntervel
+```
+
+###Imputing Missing Values:###
+
+*Step1: Calculation of the total number of missing values in the dataset (i.e. the total number of rows with NAs)*
+
+```{r}
+missing_values=sum(is.na(activity_analysis))
+n=nrow(activity_analysis)
+missing_values
+```
+
+*Step2: Replacing the missing value with the mean of the corresponding 5-minute interval variable.*
+
+```{r}
+library(Hmisc)
+activity_imputed = ddply(activity_analysis, "interval", mutate,imputed_steps = impute(steps, mean))
+```
+
+*Step3: Created a new dataset "activity_new" that is equal to the original dataset but with the missing data filled in.*
+
+```{r}
+activity_final=activity_imputed[order(activity_imputed[,2],decreasing=FALSE),]
+activity_new=activity_final[,c(4,2,3)]
+detach("package:Hmisc")
+summary(activity_new)
+```
+
+*Step4: A histogram with density curve of the new dataset with imputed missing values is shown below.*
+
+```{r}
+perDay_new=ddply(activity_new,"date",summarize, sum=sum(imputed_steps))
+
+ggplot(perDay_new, aes(x=sum)) +theme_set(theme_bw())+ geom_histogram(aes(y=..density..),binwidth=1000,
+                                                                      colour="black", fill="lightyellow") + geom_density(alpha=.2, fill="#FF6666")+
+  labs(title="Histogram of Density Vs.Average Number of Steps per Day of new dataset")+ labs(x="Average number of steps per day",y="Density")
+
+mean_imp=round(mean(perDay_new$sum,na.rm=TRUE))
+mean_imp
+median_imp=median(perDay_new$sum,na.rm=TRUE)
+median_imp
+```
+###From the histogram it appears that replacing the missing values with the means of that 5-minute interval have concentrated the average total number of steps per day around 10000 steps.###
+
+
+##Differences in activity patterns between weekdays and weekends:##
+
+*Step1: Creating a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.*
+
+```{r}
+activity_new$wend = as.factor(ifelse(weekdays(activity_new$date) %in%
+                                       c("Saturday","Sunday"), "Weekend", "Weekday"))
+activity_Weekend=subset(activity_new,wend=="Weekend")
+activity_Weekday=subset(activity_new,wend=="Weekday")
+
+byWeekend_imp=ddply(activity_Weekend,"interval",summarize, avg=mean(imputed_steps))
+byWeekday_imp=ddply(activity_Weekend,"interval",summarize, avg=mean(imputed_steps))
+```
+
+*Step2: Making a panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis)*
+
+```{r}
+library(gridExtra)
+plotWD=ggplot(byWeekday_imp, aes(x = interval, y = avg, group = 1))+ylim(0,250)+geom_line(colour="salmon")+
+  labs(title="Average Number of Steps per 5-minute Intervals during Weekdays")+
+  labs(x="5 minute interval",y="Average number of steps")
+plotWD=plotWD+theme(plot.margin=unit(c(0,1,0,1), "cm"))
+
+plotWE=ggplot(byWeekend_imp, aes(x = interval, y = avg, group = 1))+ylim(0,250)+geom_line(colour="blue")+
+  labs(title="Average Number of Steps per 5-minute Intervals during Weekends")+
+  labs(x="5 minute interval",y="Average number of steps")
+plotWE=plotWE+theme(plot.margin=unit(c(0,1,0,1), "cm"))
+
+grid.arrange(plotWE, plotWD, nrow=2, ncol=1)
+```
+
